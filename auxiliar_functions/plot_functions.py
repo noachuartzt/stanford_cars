@@ -62,14 +62,14 @@ def plot_imgs_from_generator(train_generators: dict, ncols: int = 3, nrows: int 
     # Put the code above in a subplot
     fig, ax = plt.subplots(nrows, ncols, figsize=(15, 5))
 
-    for i, (img_size, img) in enumerate(train_generators.items()):
+    for i, (size, set) in enumerate(train_generators.items()):
         # Get a random image from the generator
-        img, label = random.choice(img)
-        class_labels = {v: k for k, v in img.class_indices.items()} 
+        img, label = random.choice(set)
+        class_labels = {v: k for k, v in set.class_indices.items()} 
 
         # Plot the image
         ax[i].imshow(img[i])
-        ax[i].set_title(f'{img_size}x{img_size} - {class_labels[np.argmax(label[i])]}')
+        ax[i].set_title(f'{size}x{size} - {class_labels[np.argmax(label[i])]}')
         
         
 def plot_comparison(df_test, model_names, predicted_classes):
