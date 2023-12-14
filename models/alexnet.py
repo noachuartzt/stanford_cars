@@ -3,8 +3,8 @@ import numpy as np
 
 from settings import settings
 
-from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.models import Model, load_model
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.layers import Conv2D, MaxPool2D, Flatten, Dense, Input, Dropout
 
 class AlexNet:
@@ -24,37 +24,27 @@ class AlexNet:
 
         inputs = Input(shape=self.input_shape)
 
-        # Layer 1
         x = Conv2D(filters=96, kernel_size=11, strides=4, padding='valid', activation='relu')(inputs)
         x = MaxPool2D(pool_size=3, strides=2)(x)
 
-        # Layer 2
         x = Conv2D(filters=256, kernel_size=5, strides=1, padding='same', activation='relu')(x)
         x = MaxPool2D(pool_size=3, strides=2)(x)
 
-        # Layer 3
         x = Conv2D(filters=384, kernel_size=3, strides=1, padding='same', activation='relu')(x)
 
-        # Layer 4 
         x = Conv2D(filters=384, kernel_size=3, strides=1, padding='same', activation='relu')(x)
 
-        # Layer 5
         x = Conv2D(filters=256, kernel_size=3, strides=1, padding='same', activation='relu')(x)
         x = MaxPool2D(pool_size=3, strides=2)(x)
 
-        # Flatten the CNN output to feed it with fully connected layers
-        print(x.shape)
+        # Fully Connected Layers
         x = Flatten()(x)
-        print(x.shape)
 
-        # Layer 6
         x = Dense(4096, activation='relu')(x)
         x = Dropout(0.5)(x)
 
-        # Layer 7
         x = Dense(4096, activation='relu')(x)
         x = Dropout(0.5)(x)
-        
         output = Dense(self.num_classes, activation='softmax')(x)
 
         model = Model(inputs=inputs, outputs=output)
@@ -68,14 +58,16 @@ class AlexNet:
         return self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
         
 
-    def train(self, train_generator, validation_generator, epochs = 100, patience = 5, verbose = 1):
+    def train(self, train_generator, validation_generator, 
+              epochs = 100, batch_size = 32, verbose = 0, patience = 5):
+        
         """Trains the model."""
         
-        history_path = settings.alexnet_model + 'history.pkl'
+        history_path = settings.alexnet_model + '/history.pkl'
         
         try:
             # Open model
-            self.model = load_model(settings.alexnet_model[:-1])
+            self.model = load_model(settings.alexnet_model)
             print('Model loaded')
                         
             # Open history
@@ -88,14 +80,16 @@ class AlexNet:
             print('Model not found')
             print('Training model...')
             
+            # Create callbacks
+            checkpoint = ModelCheckpoint(settings.alexnet_model, save_best_only=True, monitor='val_loss', mode='min',verbose=verbose)
+            early_stopping = EarlyStopping(monitor='val_accuracy', patience=patience, restore_best_weights=True, verbose=verbose)
+            
             # Train model
             history = self.model.fit(train_generator,
                                      validation_data=validation_generator, 
                                      epochs=epochs, 
-                                     callbacks=[EarlyStopping(patience=patience, verbose=verbose)])
-            
-            # Save model
-            self.model.save(settings.alexnet_model)
+                                     batch_size=batch_size,
+                                     callbacks=[checkpoint, early_stopping])
             
             # Save history
             with open(history_path, 'wb') as file:
