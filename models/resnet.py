@@ -3,12 +3,12 @@ import numpy as np
 
 from settings import settings
 
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.layers import Conv2D, MaxPool2D, Flatten, Dense, Input, Dropout
 from tensorflow.keras.layers import concatenate, AveragePooling2D
 
-class ResNet50:
+class ResNet:
     
     def __init__(self, input_shape, num_classes, see_summary = False):
         self.input_shape = input_shape
@@ -25,29 +25,24 @@ class ResNet50:
 
         inputs = Input(shape=self.input_shape)
 
-        # Layer 1
         x = Conv2D(filters=64, kernel_size=3, padding='same', activation='relu')(inputs)
         x = Conv2D(filters=64, kernel_size=3, padding='same', activation='relu')(x)
         x = MaxPool2D(pool_size=2, strides=2)(x)
         
-        # Layer 2
         x = Conv2D(filters=128, kernel_size=3, padding='same', activation='relu')(x)
         x = Conv2D(filters=128, kernel_size=3, padding='same', activation='relu')(x)
         x = MaxPool2D(pool_size=2, strides=2)(x)
         
-        # Layer 3
         x = Conv2D(filters=256, kernel_size=3, padding='same', activation='relu')(x)
         x = Conv2D(filters=256, kernel_size=3, padding='same', activation='relu')(x)
         x = Conv2D(filters=256, kernel_size=3, padding='same', activation='relu')(x)
         x = MaxPool2D(pool_size=2, strides=2)(x)
         
-        # Layer 4
         x = Conv2D(filters=512, kernel_size=3, padding='same', activation='relu')(x)
         x = Conv2D(filters=512, kernel_size=3, padding='same', activation='relu')(x)
         x = Conv2D(filters=512, kernel_size=3, padding='same', activation='relu')(x)
         x = MaxPool2D(pool_size=2, strides=2)(x)
         
-        # Layer 5
         x = Conv2D(filters=512, kernel_size=3, padding='same', activation='relu')(x)
         x = Conv2D(filters=512, kernel_size=3, padding='same', activation='relu')(x)
         x = Conv2D(filters=512, kernel_size=3, padding='same', activation='relu')(x)
@@ -69,14 +64,16 @@ class ResNet50:
         return self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
         
 
-    def train(self, train_generator, validation_generator, epochs = 100, patience = 5, batch_size = 8):
+    def train(self, train_generator, validation_generator, 
+              epochs = 100, batch_size = 32, verbose = 0, patience = 5):        
+        
         """Trains the model."""
     
-        history_path = settings.resnet50_model + 'history.pkl'
+        history_path = settings.resnet_model + '/history.pkl'
     
         try:
             # Open model
-            self.model = load_model(settings.resnet50_model[:-1])
+            self.model = load_model(settings.resnet_model)
             print('Model loaded')
             
             # Open history
@@ -89,15 +86,16 @@ class ResNet50:
             print('Model not found')
             print('Training model...')
             
+            # Create callbacks
+            checkpoint = ModelCheckpoint(settings.resnet_model, save_best_only=True, monitor='val_loss', mode='min',verbose=verbose)
+            early_stopping = EarlyStopping(monitor='val_accuracy', patience=patience, restore_best_weights=True, verbose=verbose)
+            
             # Train model
             history = self.model.fit(train_generator,
                                      validation_data=validation_generator, 
                                      epochs=epochs, 
-                                     callbacks=[EarlyStopping(patience=patience)], 
-                                     batch_size=batch_size)
-            
-            # Save model
-            self.model.save(settings.resnet50_model)
+                                     batch_size=batch_size,
+                                     callbacks=[checkpoint, early_stopping])
             
             # Save history
             with open(history_path, 'wb') as file:

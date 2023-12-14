@@ -3,8 +3,8 @@ import numpy as np
 
 from settings import settings
 
-from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.models import Model, load_model
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.layers import Conv2D, MaxPool2D, Flatten, Dense, Input, Dropout
 from tensorflow.keras.layers import concatenate, AveragePooling2D
 
@@ -74,6 +74,7 @@ class GoogleNet:
         # Layer 7
         x = Dropout(0.4)(x)
         x = Flatten()(x)
+        x = Dense(units=1000, activation='relu')(x)
         output = Dense(units=self.num_classes, activation='softmax', name='fc')(x)
         
         model = Model(inputs=inputs, outputs=output)
@@ -86,14 +87,16 @@ class GoogleNet:
         return self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
         
 
-    def train(self, train_generator, validation_generator, epochs = 100, patience = 5, batch_size = 32):
+    def train(self, train_generator, validation_generator, 
+              epochs = 100, batch_size = 32, verbose = 0, patience = 5):        
+        
         """Trains the model."""
         
-        history_path = settings.googlenet_model + 'history.pkl'
+        history_path = settings.googlenet_model + '/history.pkl'
         
         try:
             # Open model
-            self.model = load_model(settings.googlenet_model[:-1])
+            self.model = load_model(settings.googlenet_model)
             print('Model loaded')
                         
             # Open history
@@ -106,15 +109,16 @@ class GoogleNet:
             print('Model not found')
             print('Training model...')
             
+            # Create callbacks
+            checkpoint = ModelCheckpoint(settings.googlenet_model, save_best_only=True, monitor='val_loss', mode='min',verbose=verbose)
+            early_stopping = EarlyStopping(monitor='val_accuracy', patience=patience, restore_best_weights=True, verbose=verbose)
+            
             # Train model
             history = self.model.fit(train_generator,
                                      validation_data=validation_generator, 
                                      epochs=epochs, 
-                                     callbacks=[EarlyStopping(patience=patience)],
-                                     batch_size=batch_size)
-            
-            # Save model
-            self.model.save(settings.googlenet_model)
+                                     batch_size=batch_size,
+                                     callbacks=[checkpoint, early_stopping])
             
             # Save history
             with open(history_path, 'wb') as file:

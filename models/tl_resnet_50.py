@@ -1,13 +1,14 @@
-import pickle
 import numpy as np
-
 from settings import settings
 
 from tensorflow.keras.models import Model, load_model
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
-from tensorflow.keras.layers import Conv2D, Flatten, Dense, Input, AveragePooling2D
+from tensorflow.keras.layers import GlobalAveragePooling2D, Dense, Dropout, BatchNormalization
 
-class LeNet:
+from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+
+class ResNet50_TL:
     
     def __init__(self, input_shape, num_classes, see_summary = False):
         self.input_shape = input_shape
@@ -17,78 +18,68 @@ class LeNet:
         
         if see_summary:
             print(self.model.summary())
-        
+            
     def build_model(self):
         """Builds a convolutional neural network model."""
 
-        inputs = Input(shape=self.input_shape)
+        # Load pre-trained ResNet50 model without top layers
+        base_model = ResNet50(weights='imagenet', include_top=False, input_shape=self.input_shape)
 
-        x = Conv2D(filters=6, kernel_size=5, strides=1, activation='tanh')(inputs)
-        x = AveragePooling2D(strides=2)(x)
+        # Freeze base model layers
+        for layer in base_model.layers:
+            if "BatchNormalization" in layer.__class__.__name__:
+                layer.trainable = True
+        
+        # Add custom layers for classification
+        x = GlobalAveragePooling2D()(base_model.output)
+        x = BatchNormalization()(x)  
 
-        x = Conv2D(filters=16, kernel_size=5, strides=1, activation='tanh')(x)
-        x = AveragePooling2D(strides=2)(x)
+        x = Dense(1024, activation='relu')(x)
+        x = Dropout(0.5)(x)  
+        x = BatchNormalization()(x)  
 
-        x = Conv2D(filters=120, kernel_size=5, strides=1, activation='tanh')(x)
-        x = Flatten()(x)
+        x = Dense(512, activation='relu')(x)
+        x = Dropout(0.5)(x)  
+        x = BatchNormalization()(x)  
 
-        # Fully Connected Layers
-        x = Dense(units=84, activation='tanh')(x)
         output = Dense(self.num_classes, activation='softmax')(x)
 
-        model = Model(inputs=inputs, outputs=output)
+        model = Model(inputs=base_model.input, outputs=output)
         
         return model
-    
-    
+
+
     def compile_model(self, optimizer='adam', loss='categorical_crossentropy', metrics= ['accuracy']):
         """Compiles the model."""
 
         return self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-        
-
+    
+    
     def train(self, train_generator, validation_generator, 
               epochs = 100, batch_size = 32, verbose = 0, patience = 5):
         
         """Trains the model."""
         
-        history_path = settings.lenet_model + '/history.pkl'
-        
+        path = settings.tl_resnet50_model + '_5.ckpt'
         try:
             # Open model
-            self.model = load_model(settings.lenet_model)
+            self.model = load_model(path)
             print('Model loaded')            
-            
-            # Open history
-            with open(history_path, 'rb') as file:
-                history = pickle.load(file)
-        
-            print('History loaded')
             
         except:
             print('Model not found')
-            print('Training model...')
+            print('Training model')
             
-            # Create callbacks
-            checkpoint = ModelCheckpoint(settings.lenet_model, save_best_only=True, monitor='val_loss', mode='min',verbose=verbose)
+            # Create callbacks 
+            checkpoint = ModelCheckpoint(settings.tl_resnet50_model + '_6.ckpt', save_best_only=True, monitor='val_loss', mode='min', verbose=verbose)
             early_stopping = EarlyStopping(monitor='val_accuracy', patience=patience, restore_best_weights=True, verbose=verbose)
+
+            self.model.fit(train_generator, validation_data=validation_generator,
+                    epochs=epochs, batch_size=batch_size, callbacks=[checkpoint, early_stopping])
             
-            # Train model
-            history = self.model.fit(train_generator,
-                                     validation_data=validation_generator, 
-                                     epochs=epochs, 
-                                     batch_size=batch_size,
-                                     callbacks=[checkpoint, early_stopping])
+            print('Model trained')
             
-            # Save history
-            with open(history_path, 'wb') as file:
-                pickle.dump(history, file)
-                
-            print('Model and history saved')
             
-        return history
-    
-    
     def evaluate(self, test_generator):
         """Evaluates the model."""        
         
